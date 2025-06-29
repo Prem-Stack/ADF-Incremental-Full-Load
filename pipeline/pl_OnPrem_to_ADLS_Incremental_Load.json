@@ -1,0 +1,237 @@
+{
+	"name": "pl_OnPrem_to_ADLS_Incremental_Load",
+	"properties": {
+		"activities": [
+			{
+				"name": "Lookup for OnCloud Tables",
+				"type": "Lookup",
+				"dependsOn": [],
+				"policy": {
+					"timeout": "0.12:00:00",
+					"retry": 0,
+					"retryIntervalInSeconds": 30,
+					"secureOutput": false,
+					"secureInput": false
+				},
+				"userProperties": [],
+				"typeProperties": {
+					"source": {
+						"type": "AzureSqlSource",
+						"sqlReaderQuery": "SELECT * FROM [dbo].[controltable] where Indicator in (0,1)",
+						"queryTimeout": "02:00:00",
+						"partitionOption": "None"
+					},
+					"dataset": {
+						"referenceName": "ds_AzureSqlTable",
+						"type": "DatasetReference"
+					},
+					"firstRowOnly": false
+				}
+			},
+			{
+				"name": "Iterate OnCloud Data",
+				"type": "ForEach",
+				"dependsOn": [
+					{
+						"activity": "Lookup for OnCloud Tables",
+						"dependencyConditions": [
+							"Succeeded"
+						]
+					}
+				],
+				"userProperties": [],
+				"typeProperties": {
+					"items": {
+						"value": "@activity('Lookup for OnCloud Tables').output.value",
+						"type": "Expression"
+					},
+					"activities": [
+						{
+							"name": "If Condition",
+							"type": "IfCondition",
+							"dependsOn": [],
+							"userProperties": [],
+							"typeProperties": {
+								"expression": {
+									"value": "@equals(item().Load_Type,'incremental')",
+									"type": "Expression"
+								},
+								"ifTrueActivities": [
+									{
+										"name": "Lookup ControlTable",
+										"type": "Lookup",
+										"dependsOn": [],
+										"policy": {
+											"timeout": "0.12:00:00",
+											"retry": 0,
+											"retryIntervalInSeconds": 30,
+											"secureOutput": false,
+											"secureInput": false
+										},
+										"userProperties": [],
+										"typeProperties": {
+											"source": {
+												"type": "SqlServerSource",
+												"sqlReaderQuery": {
+													"value": "@if(equals(toLower(item().Load_Type), 'incremental'), concat('SELECT MAX(', item().Watermark_column, ') AS Watermark_Value FROM [', item().Source_Object_Schema, '].', item().Source_Object_Name), 'SELECT NULL AS Watermark_Value')",
+													"type": "Expression"
+												},
+												"queryTimeout": "02:00:00",
+												"partitionOption": "None"
+											},
+											"dataset": {
+												"referenceName": "ds_SqlServerTable_Param_Source",
+												"type": "DatasetReference",
+												"parameters": {
+													"SchemaName": {
+														"value": "@item().Source_Object_Schema",
+														"type": "Expression"
+													},
+													"TableName": {
+														"value": "@item().Source_Object_Name",
+														"type": "Expression"
+													}
+												}
+											}
+										}
+									},
+									{
+										"name": "Copy Incremental data",
+										"type": "Copy",
+										"dependsOn": [
+											{
+												"activity": "Lookup ControlTable",
+												"dependencyConditions": [
+													"Succeeded"
+												]
+											}
+										],
+										"policy": {
+											"timeout": "0.12:00:00",
+											"retry": 0,
+											"retryIntervalInSeconds": 30,
+											"secureOutput": false,
+											"secureInput": false
+										},
+										"userProperties": [],
+										"typeProperties": {
+											"source": {
+												"type": "SqlServerSource",
+												"sqlReaderQuery": {
+													"value": "@concat('Select * from ' ,item().Source_Object_Schema,'.',item().Source_Object_Name,' where ',item().watermark_column,'>',item().watermark_value)",
+													"type": "Expression"
+												},
+												"queryTimeout": "02:00:00",
+												"partitionOption": "None"
+											},
+											"sink": {
+												"type": "DelimitedTextSink",
+												"storeSettings": {
+													"type": "AzureBlobFSWriteSettings"
+												},
+												"formatSettings": {
+													"type": "DelimitedTextWriteSettings",
+													"quoteAllText": true,
+													"fileExtension": ".csv"
+												}
+											},
+											"enableStaging": false,
+											"translator": {
+												"type": "TabularTranslator",
+												"typeConversion": true,
+												"typeConversionSettings": {
+													"allowDataTruncation": true,
+													"treatBooleanAsNumber": false
+												}
+											}
+										},
+										"inputs": [
+											{
+												"referenceName": "ds_SqlServerTable_Param_Source",
+												"type": "DatasetReference",
+												"parameters": {
+													"SchemaName": "@item().Source_Object_Schema",
+													"TableName": "@item().Source_Object_Name"
+												}
+											}
+										],
+										"outputs": [
+											{
+												"referenceName": "ds_DelimitedText_Target",
+												"type": "DatasetReference",
+												"parameters": {
+													"SchemaName": "@item().Source_Object_Schema",
+													"TableName": {
+														"value": "@concat(item().Target_Object_Name,'.csv')",
+														"type": "Expression"
+													},
+													"ContainerName": {
+														"value": "@item().Target_Location",
+														"type": "Expression"
+													}
+												}
+											}
+										]
+									},
+									{
+										"name": "Stored procedure",
+										"type": "SqlServerStoredProcedure",
+										"dependsOn": [
+											{
+												"activity": "Copy Incremental data",
+												"dependencyConditions": [
+													"Succeeded"
+												]
+											}
+										],
+										"policy": {
+											"timeout": "0.12:00:00",
+											"retry": 0,
+											"retryIntervalInSeconds": 30,
+											"secureOutput": false,
+											"secureInput": false
+										},
+										"userProperties": [],
+										"typeProperties": {
+											"storedProcedureName": "[dbo].[sp_UpdateWatermark]",
+											"storedProcedureParameters": {
+												"Source_Object_Name": {
+													"value": {
+														"value": "@item().Source_Object_Name",
+														"type": "Expression"
+													},
+													"type": "String"
+												},
+												"Watermark_Column": {
+													"value": {
+														"value": "@item().Watermark_Column",
+														"type": "Expression"
+													},
+													"type": "String"
+												},
+												"Watermark_Value": {
+													"value": {
+														"value": "@activity('Lookup ControlTable').output.firstRow.watermark_value",
+														"type": "Expression"
+													},
+													"type": "String"
+												}
+											}
+										},
+										"linkedServiceName": {
+											"referenceName": "ls_AzureSqlDatabase",
+											"type": "LinkedServiceReference"
+										}
+									}
+								]
+							}
+						}
+					]
+				}
+			}
+		],
+		"annotations": [],
+		"lastPublishTime": "2025-06-29T07:46:20Z"
+	},
+	"type": "Microsoft.DataFactory/factories/pipelines"
+}

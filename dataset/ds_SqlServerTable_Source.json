@@ -1,0 +1,18 @@
+{
+	"name": "ds_SqlServerTable_Source",
+	"properties": {
+		"linkedServiceName": {
+			"referenceName": "ls_onPrem_SqlServer",
+			"type": "LinkedServiceReference",
+			"parameters": {
+				"OnPremServerName": "LAPTOP-LSK9B8K6\\SQLEXPRESS",
+				"OnPremDbName": "SupplyChain",
+				"OnPremUserName": "prem"
+			}
+		},
+		"annotations": [],
+		"type": "SqlServerTable",
+		"schema": []
+	},
+	"type": "Microsoft.DataFactory/factories/datasets"
+}

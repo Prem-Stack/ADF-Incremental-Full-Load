@@ -1,0 +1,36 @@
+{
+	"name": "ds_SqlServerTable_Param_Source",
+	"properties": {
+		"linkedServiceName": {
+			"referenceName": "ls_onPrem_SqlServer",
+			"type": "LinkedServiceReference",
+			"parameters": {
+				"OnPremServerName": "LAPTOP-LSK9B8K6\\SQLEXPRESS",
+				"OnPremDbName": "SupplyChain",
+				"OnPremUserName": "prem"
+			}
+		},
+		"parameters": {
+			"SchemaName": {
+				"type": "string"
+			},
+			"TableName": {
+				"type": "string"
+			}
+		},
+		"annotations": [],
+		"type": "SqlServerTable",
+		"schema": [],
+		"typeProperties": {
+			"schema": {
+				"value": "@dataset().SchemaName",
+				"type": "Expression"
+			},
+			"table": {
+				"value": "@dataset().TableName",
+				"type": "Expression"
+			}
+		}
+	},
+	"type": "Microsoft.DataFactory/factories/datasets"
+}
